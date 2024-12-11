@@ -1,54 +1,146 @@
-def predict(self, X, stop=None):
+import pandas as pd
+import numpy as np
+from sklearn.linear_model import LinearRegression
+
+
+class FullKolmogorovGaborPolynomial:
     """
-    Make predictions based on the trained model.
+    A class to construct the Kolmogorov-Gabor polynomial.
 
-    Parameters:
+    Attributes:
     ----------
-    X : DataFrame
-        Input data (features).
-    stop : int, optional
-        Number of iterations for prediction (default is None, which means using self.stop value).
+    models_dict : dict
+        A dictionary to store trained models.
 
-    Returns:
-    ----------
-    final_predictions_df : DataFrame
-        DataFrame containing the final predictions.
+    partial_polynomial_df : DataFrame
+        DataFrame to store intermediate results during training.
+
+    stop : int
+        Number of iterations for training the model.
     """
-    if stop is None:
-        stop = self.stop
 
-    # Create a copy of X for modification
-    local_X = X.copy()
+    def __init__(self):
+        """
+        Initializes the KolmogorovGaborPolynomial class.
+        """
+        self.models_dict = {}  # Dictionary to store models
 
-    # Initial predictions
-    model = self.models_dict['1']
-    predictions = model.predict(local_X)
+    def fit(self, X, Y, stop=None):
+        """
+        Trains the model based on input data.
 
-    # Create a DataFrame for storing intermediate prediction results
-    predict_polynomial_df = pd.DataFrame(index=X.index)
-    predict_polynomial_df['Y_pred'] = predictions.flatten()
+        Parameters:
+        ----------
+        X : DataFrame
+            Input data (features).
+        Y : DataFrame or Series
+            Target values.
+        stop : int, optional
+            Number of iterations for training the model (default is None, which means using all features).
 
-    # Add the first column from local_X, squared, to predict_polynomial_df and remove it from local_X
-    predict_polynomial_df[local_X.columns[0] + '^2'] = local_X.iloc[:, 0] ** 2
-    local_X.drop(local_X.columns[0], axis=1, inplace=True)
+        Returns:
+        ----------
+        model : LinearRegression
+            Trained model at the last iteration.
+        """
+        if stop is None:
+            stop = len(X.columns)
+        self.stop = stop
 
-    for i in range(2, stop + 1):
-        # Add new polynomial feature of Y_pred
-        predict_polynomial_df[f'Y_pred^{i}'] = (predictions ** i).flatten()
+        # Create a copy of X for modification
+        local_X = X.copy()
 
-        # Limit prediction values to avoid overflow
-        predict_polynomial_df.replace([np.inf, -np.inf], np.nan, inplace=True)
-        predict_polynomial_df.fillna(0, inplace=True)
+        # Initial model (first iteration)
+        model = LinearRegression()
+        model.fit(local_X, Y)
+        predictions = model.predict(local_X)
 
-        # Add the next column from local_X, squared, to predict_polynomial_df, if available
-        if not local_X.empty:
-            predict_polynomial_df[local_X.columns[0] + '^2'] = local_X.iloc[:, 0] ** 2
-            local_X.drop(local_X.columns[0], axis=1, inplace=True)
+        # Create a DataFrame to store intermediate results
+        self.partial_polynomial_df = pd.DataFrame(index=Y.index)
+        self.partial_polynomial_df['Y'] = Y.values.flatten()
+        self.partial_polynomial_df['Y_pred'] = predictions.flatten()
 
-        model = self.models_dict[str(i)]
-        predictions = model.predict(predict_polynomial_df)
+        # Add the first column from local_X, squared, to partial_polynomial_df and remove it from local_X
+        self.partial_polynomial_df[local_X.columns[0] + '^2'] = local_X.iloc[:, 0] ** 2
+        local_X.drop(local_X.columns[0], axis=1, inplace=True)
 
-    # Create the final DataFrame with only the final predictions
-    final_predictions_df = pd.DataFrame({'Predictions': predictions.flatten()}, index=range(len(predictions)))
+        self.models_dict['1'] = model
 
-    return final_predictions_df
+        for i in range(2, stop + 1):
+            # Add a new polynomial function Y_pred
+            self.partial_polynomial_df[f'Y_pred^{i}'] = (predictions ** i).flatten()
+
+            # Limit prediction values to avoid overflow
+            self.partial_polynomial_df.replace([np.inf, -np.inf], np.nan, inplace=True)
+            self.partial_polynomial_df.fillna(0, inplace=True)
+
+            # Add the next column from local_X, squared, to partial_polynomial_df if available
+            if not local_X.empty:
+                self.partial_polynomial_df[local_X.columns[0] + '^2'] = local_X.iloc[:, 0] ** 2
+                local_X.drop(local_X.columns[0], axis=1, inplace=True)
+
+            # Train a new model with additional features
+            model = LinearRegression()
+            X_new = self.partial_polynomial_df.drop(columns='Y')
+            model.fit(X_new, Y)
+            # predictions = model.predict(X_new)
+
+            self.models_dict[str(i)] = model
+
+        return self.models_dict[str(stop)]
+
+    def predict(self, X, stop=None):
+        """
+        Make predictions based on the trained model.
+    
+        Parameters:
+        ----------
+        X : DataFrame
+            Input data (features).
+        stop : int, optional
+            Number of iterations for prediction (default is None, which means using self.stop value).
+    
+        Returns:
+        ----------
+        final_predictions_df : DataFrame
+            DataFrame containing the final predictions.
+        """
+        if stop is None:
+            stop = self.stop
+    
+        # Create a copy of X for modification
+        local_X = X.copy()
+    
+        # Initial predictions
+        model = self.models_dict['1']
+        predictions = model.predict(local_X)
+    
+        # Create a DataFrame for storing intermediate prediction results
+        predict_polynomial_df = pd.DataFrame(index=X.index)
+        predict_polynomial_df['Y_pred'] = predictions.flatten()
+    
+        # Add the first column from local_X, squared, to predict_polynomial_df and remove it from local_X
+        predict_polynomial_df[local_X.columns[0] + '^2'] = local_X.iloc[:, 0] ** 2
+        local_X.drop(local_X.columns[0], axis=1, inplace=True)
+    
+        for i in range(2, stop + 1):
+            # Add new polynomial feature of Y_pred
+            predict_polynomial_df[f'Y_pred^{i}'] = (predictions ** i).flatten()
+    
+            # Limit prediction values to avoid overflow
+            predict_polynomial_df.replace([np.inf, -np.inf], np.nan, inplace=True)
+            predict_polynomial_df.fillna(0, inplace=True)
+    
+            # Add the next column from local_X, squared, to predict_polynomial_df, if available
+            if not local_X.empty:
+                predict_polynomial_df[local_X.columns[0] + '^2'] = local_X.iloc[:, 0] ** 2
+                local_X.drop(local_X.columns[0], axis=1, inplace=True)
+    
+            model = self.models_dict[str(i)]
+            predictions = model.predict(predict_polynomial_df)
+    
+        # Create the final DataFrame with only the final predictions
+        final_predictions_df = pd.DataFrame({'Predictions': predictions.flatten()}, index=range(len(predictions)))
+    
+        return final_predictions_df
+
