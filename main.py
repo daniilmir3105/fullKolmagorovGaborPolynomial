@@ -2,6 +2,7 @@ import pandas as pd
 import numpy as np
 from sklearn.linear_model import LinearRegression
 
+
 class FullKolmogorovGaborPolynomial:
     """
     Класс для построения полинома Колмогорова-Габора.
@@ -34,7 +35,7 @@ class FullKolmogorovGaborPolynomial:
             Входные данные (признаки).
         Y : DataFrame или Series
             Целевые значения.
-        stop : int, необязательно
+        stop : int, optional
             Количество итераций для обучения модели (по умолчанию None, что означает использование всех признаков).
 
         Возвращает:
@@ -59,7 +60,7 @@ class FullKolmogorovGaborPolynomial:
         self.partial_polynomial_df['Y'] = Y.values.flatten()
         self.partial_polynomial_df['Y_pred'] = predictions.flatten()
 
-        # Добавляем первый столбец из local_X, возведенный в квадрат, в partial_polynomial_df и удаляем его из local_X
+        # Добавляем первый столбец из local_X, возведённый в квадрат, в partial_polynomial_df и удаляем его из local_X
         self.partial_polynomial_df[local_X.columns[0] + '^2'] = local_X.iloc[:, 0] ** 2
         local_X.drop(local_X.columns[0], axis=1, inplace=True)
 
@@ -73,7 +74,7 @@ class FullKolmogorovGaborPolynomial:
             self.partial_polynomial_df.replace([np.inf, -np.inf], np.nan, inplace=True)
             self.partial_polynomial_df.fillna(0, inplace=True)
 
-            # Добавляем следующий столбец из local_X, возведенный в квадрат, в partial_polynomial_df, если доступен
+            # Добавляем следующий столбец из local_X, возведённый в квадрат, в partial_polynomial_df, если доступно
             if not local_X.empty:
                 self.partial_polynomial_df[local_X.columns[0] + '^2'] = local_X.iloc[:, 0] ** 2
                 local_X.drop(local_X.columns[0], axis=1, inplace=True)
@@ -82,7 +83,7 @@ class FullKolmogorovGaborPolynomial:
             model = LinearRegression()
             X_new = self.partial_polynomial_df.drop(columns='Y')
             model.fit(X_new, Y)
-            predictions = model.predict(X_new)
+            # predictions = model.predict(X_new)
 
             self.models_dict[str(i)] = model
 
@@ -90,55 +91,55 @@ class FullKolmogorovGaborPolynomial:
 
     def predict(self, X, stop=None):
         """
-        Делает предсказания на основе обученной модели.
-
+        Выполняет предсказания на основе обученной модели.
+    
         Параметры:
         ----------
         X : DataFrame
             Входные данные (признаки).
-        stop : int, необязательно
+        stop : int, optional
             Количество итераций для предсказания (по умолчанию None, что означает использование значения self.stop).
-
+    
         Возвращает:
         ----------
-        predictions : ndarray
-            Предсказанные значения.
+        final_predictions_df : DataFrame
+            DataFrame, содержащий финальные предсказания.
         """
         if stop is None:
             stop = self.stop
-
+    
         # Создаем копию X для модификации
         local_X = X.copy()
-
+    
         # Начальные предсказания
         model = self.models_dict['1']
         predictions = model.predict(local_X)
-
-        if stop == 1:
-            return predictions
-
-        # Создаем DataFrame для хранения промежуточных результатов предсказаний
+    
+        # Создаем DataFrame для хранения промежуточных результатов предсказания
         predict_polynomial_df = pd.DataFrame(index=X.index)
         predict_polynomial_df['Y_pred'] = predictions.flatten()
-
-        # Добавляем первый столбец из local_X, возведенный в квадрат, в predict_polynomial_df и удаляем его из local_X
+    
+        # Добавляем первый столбец из local_X, возведённый в квадрат, в predict_polynomial_df и удаляем его из local_X
         predict_polynomial_df[local_X.columns[0] + '^2'] = local_X.iloc[:, 0] ** 2
         local_X.drop(local_X.columns[0], axis=1, inplace=True)
-
+    
         for i in range(2, stop + 1):
             # Добавляем новую полиномиальную функцию Y_pred
             predict_polynomial_df[f'Y_pred^{i}'] = (predictions ** i).flatten()
-
+    
             # Ограничиваем значения предсказаний, чтобы избежать переполнения
             predict_polynomial_df.replace([np.inf, -np.inf], np.nan, inplace=True)
             predict_polynomial_df.fillna(0, inplace=True)
-
-            # Добавляем следующий столбец из local_X, возведенный в квадрат, в predict_polynomial_df, если доступен
+    
+            # Добавляем следующий столбец из local_X, возведённый в квадрат, в predict_polynomial_df, если доступно
             if not local_X.empty:
                 predict_polynomial_df[local_X.columns[0] + '^2'] = local_X.iloc[:, 0] ** 2
                 local_X.drop(local_X.columns[0], axis=1, inplace=True)
-
+    
             model = self.models_dict[str(i)]
             predictions = model.predict(predict_polynomial_df)
-
-        return predictions
+    
+        # Создаем финальный DataFrame только с финальными предсказаниями
+        final_predictions_df = pd.DataFrame({'Predictions': predictions.flatten()}, index=range(len(predictions)))
+    
+        return final_predictions_df
